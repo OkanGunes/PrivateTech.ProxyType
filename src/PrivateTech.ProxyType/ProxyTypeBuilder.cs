@@ -21,23 +21,33 @@ namespace PrivateTech.ProxyType
 
         private static ConcurrentDictionary<Type, Type> dic = new ConcurrentDictionary<Type, Type>();
 
+        private static object obj = new object();
+
+        public static Type GetProxyType(Type type)
+        {
+            CheckType(type);
+
+            if (dic.TryGetValue(type, out var proxyType)) return proxyType;
+
+            lock (obj)
+            {
+                TypeBuilder typeBuilder = CreateTypeBuilder(ref type);
+
+                Array.ForEach(type.GetProperties(), property => property.DefineProperty(typeBuilder));
+
+                proxyType = typeBuilder.CreateTypeInfo();
+
+                dic.TryAdd(type, proxyType);
+
+                return proxyType;
+            }
+        }
+
         public static TInterface GetInstace<TInterface>()
         {
-            var type = CheckType<TInterface>();
+            var proxyType = GetProxyType(typeof(TInterface));
 
-            if (dic.TryGetValue(type, out var proxyType)) return CreateInstace();
-
-            TypeBuilder typeBuilder = CreateTypeBuilder(ref type);
-
-            Array.ForEach(type.GetProperties(), property => property.DefineProperty(typeBuilder));
-
-            proxyType = typeBuilder.CreateTypeInfo();
-
-            dic.TryAdd(type, proxyType);
-
-            return CreateInstace();
-
-            TInterface CreateInstace() => (TInterface)Activator.CreateInstance(proxyType);
+            return (TInterface)Activator.CreateInstance(proxyType);
         }
 
         private static void DefineProperty(this PropertyInfo propertyInfo, TypeBuilder typeBuilder)
@@ -119,14 +129,13 @@ namespace PrivateTech.ProxyType
             return typeBuilder;
         }
 
-        private static Type CheckType<TInterface>()
+        private static void CheckType(Type type)
         {
-            var type = typeof(TInterface);
+            if (type == null)
+                throw new Exception($"{nameof(type)} cannot be empty");
 
             if (!type.IsInterface)
-                throw new Exception("Type is not interface");
-
-            return type;
+                throw new Exception($"{nameof(type)} should be interface");
         }
     }
 }
